@@ -122,7 +122,7 @@ def create_scenario_a_graph(api: SQLiteCompanyAPI, checkpointer: Optional[BaseCh
                 "note": "Mocked plan (OPENROUTER_API_KEY not set)",
             }
         else:
-            model_name = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-pro")
+            model_name = os.environ.get("OPENROUTER_MODEL", "google/gemini-3.1-pro-preview")
 
             system_prompt = (
                 "You are an expert enterprise supply chain orchestrator. "

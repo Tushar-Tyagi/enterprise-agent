@@ -217,7 +217,7 @@ def create_freeform_agent_graph(
         else:
             # Live OpenRouter LLM Call
             tools = get_all_tools(api=api, user_id=user_id)
-            model_name = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-pro")
+            model_name = os.environ.get("OPENROUTER_MODEL", "google/gemini-3.1-pro-preview")
 
             try:
                 llm = ChatOpenAI(
@@ -229,7 +229,7 @@ def create_freeform_agent_graph(
                 llm_with_tools = llm.bind_tools(tools)
                 ai_msg = llm_with_tools.invoke(messages)
             except Exception:
-                fallback_model = "google/gemini-2.5-flash"
+                fallback_model = "google/gemini-2.5-pro"
                 llm = ChatOpenAI(
                     base_url="https://openrouter.ai/api/v1",
                     api_key=api_key,
