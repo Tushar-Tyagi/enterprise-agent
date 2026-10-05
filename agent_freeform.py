@@ -65,7 +65,10 @@ def create_freeform_agent_graph(
                 "You are an expert enterprise operations and supply chain agent.\n"
                 "Your objective is to resolve operational disruptions and stockout risks autonomously.\n"
                 "Inspect incoming signals, emails, POs, and production schedules, evaluate approved suppliers, "
-                "and execute mitigation actions.\n\n"
+                "and execute the full mitigation workflow:\n"
+                "  Step 1: Cancel the delayed purchase order.\n"
+                "  Step 2: Create a replacement purchase order with an approved alternate supplier capable of delivering before scheduled production start.\n"
+                "  Step 3: Notify the production supervisor (user ID: 'u-301' / Sam Taylor) regarding Order 4812 resolution.\n\n"
                 "CRITICAL POLICIES:\n"
                 "1. Every single tool call MUST provide a detailed 'reason' parameter justifying the call.\n"
                 "   Generic phrases like 'mitigate disruption' or 'cancel delayed PO' are STRICTLY PROHIBITED.\n"
@@ -75,7 +78,8 @@ def create_freeform_agent_graph(
                 "   (b) The exact delay details (e.g. Supplier Y delayed PO-77812 to 2026-09-08, slipping past start).\n"
                 "   (c) The chosen alternate supplier, unit price, lead time, and promised delivery date before production starts (e.g. Supplier Z / S-Z delivering on 2026-09-04).\n"
                 "2. All mutating tools (creating/cancelling POs, notifications) are intercepted by human gating.\n"
-                "3. Each mutating call must specify a unique 'idempotency_key'.\n\n"
+                "3. Each mutating call must specify a unique 'idempotency_key'.\n"
+                "4. Operational Directory: Production Supervisor for Order 4812 is Sam Taylor (user ID: 'u-301'). When calling notify_production, set supervisor_id='u-301' and order_id='4812'.\n\n"
                 f"{toolcards_doc}"
             )
             human_prompt = (

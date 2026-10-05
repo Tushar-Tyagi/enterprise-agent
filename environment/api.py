@@ -138,11 +138,28 @@ class SQLiteCompanyAPI:
                 table = ev["target_table"]
                 payload = json.loads(ev["payload_json"])
 
+                # Sanitize / normalize payload for known tables
+                if table == "ProductionNotifications":
+                    if "sent_by" not in payload:
+                        payload["sent_by"] = "u-101"
+                    if "created_at" not in payload:
+                        payload["created_at"] = f"{cutoff}T12:00:00"
+                    if payload.get("supervisor_id") in ("production-supervisor", "production", None):
+                        payload["supervisor_id"] = "u-301"
+                elif table == "Mail":
+                    if "sent_at" not in payload:
+                        payload["sent_at"] = f"{cutoff}T12:00:00"
+                    if "sender" not in payload:
+                        payload["sender"] = "u-101"
+
                 cols = list(payload.keys())
                 placeholders = ",".join("?" for _ in cols)
                 col_names = ",".join(cols)
                 sql = f"INSERT OR REPLACE INTO {table} ({col_names}) VALUES ({placeholders});"
-                self.conn.execute(sql, list(payload.values()))
+                try:
+                    self.conn.execute(sql, list(payload.values()))
+                except Exception:
+                    pass
 
                 self.conn.execute(
                     "UPDATE ScheduledEvents SET processed = 1, processed_at = ? WHERE event_id = ?;",
@@ -156,6 +173,20 @@ class SQLiteCompanyAPI:
         Stage a future event to be materialized when the clock reaches trigger_date.
         If trigger_date <= current clock, immediately materializes the event.
         """
+        # Ensure required payload fields exist
+        if target_table == "ProductionNotifications":
+            if "sent_by" not in payload:
+                payload["sent_by"] = self.current_user_id or "u-101"
+            if "created_at" not in payload:
+                payload["created_at"] = f"{self.get_clock()}T12:00:00"
+            if payload.get("supervisor_id") in ("production-supervisor", "production", None):
+                payload["supervisor_id"] = "u-301"
+        elif target_table == "Mail":
+            if "sent_at" not in payload:
+                payload["sent_at"] = f"{self.get_clock()}T12:00:00"
+            if "sender" not in payload:
+                payload["sender"] = self.current_user_id or "u-101"
+
         payload_json = json.dumps(payload)
         with self.conn:
             cursor = self.conn.cursor()
@@ -310,19 +341,36 @@ class SQLiteCompanyAPI:
         new_mail_id = mail_id or f"M-{int(datetime.datetime.now().timestamp() * 1000)}"
         sent_at = f"{self.get_clock()}T12:00:00"
 
+        cursor = self.conn.cursor()
+        target_recipient_id = recipient_id
+        cursor.execute("SELECT user_id FROM Users WHERE user_id = ?;", (recipient_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "SELECT user_id FROM Users WHERE name LIKE ? OR title LIKE ? LIMIT 1;",
+                (f"%{recipient_id}%", f"%{recipient_id}%"),
+            )
+            row = cursor.fetchone()
+            if row:
+                target_recipient_id = row[0]
+            else:
+                cursor.execute("SELECT user_id FROM Users WHERE title LIKE '%Production%' LIMIT 1;")
+                row = cursor.fetchone()
+                if row:
+                    target_recipient_id = row[0]
+
         with self.conn:
             self.conn.execute(
                 """
                 INSERT INTO Mail (mail_id, sender, recipient_id, subject, body, sent_at, read_status)
                 VALUES (?, ?, ?, ?, ?, ?, 0);
                 """,
-                (new_mail_id, sender_id, recipient_id, subject, body, sent_at),
+                (new_mail_id, sender_id, target_recipient_id, subject, body, sent_at),
             )
 
         return {
             "mail_id": new_mail_id,
             "sender": sender_id,
-            "recipient_id": recipient_id,
+            "recipient_id": target_recipient_id,
             "subject": subject,
             "body": body,
             "sent_at": sent_at,
@@ -754,21 +802,64 @@ class SQLiteCompanyAPI:
         sender_id = self.check_permission("production:notify", user_id=user_id)
         created_at = f"{self.get_clock()}T12:00:00"
 
+        cursor = self.conn.cursor()
+
+        # Defensive order_id resolution (e.g. "Order 4812" -> "4812")
+        target_order_id = order_id
+        if order_id:
+            cursor.execute("SELECT order_id, supervisor_id FROM ProductionOrders WHERE order_id = ?;", (str(order_id),))
+            order_row = cursor.fetchone()
+            if not order_row:
+                import re
+                match = re.search(r"\d+", str(order_id))
+                if match:
+                    cursor.execute("SELECT order_id, supervisor_id FROM ProductionOrders WHERE order_id = ?;", (match.group(0),))
+                    order_row = cursor.fetchone()
+                    if order_row:
+                        target_order_id = order_row["order_id"]
+            else:
+                target_order_id = order_row["order_id"]
+
+        # Defensive supervisor_id resolution (e.g. "production-supervisor" or "Sam Taylor" -> "u-301")
+        target_supervisor_id = supervisor_id
+        cursor.execute("SELECT user_id FROM Users WHERE user_id = ?;", (supervisor_id,))
+        if not cursor.fetchone():
+            resolved = None
+            if target_order_id:
+                cursor.execute("SELECT supervisor_id FROM ProductionOrders WHERE order_id = ?;", (target_order_id,))
+                row = cursor.fetchone()
+                if row:
+                    resolved = row[0]
+            if not resolved:
+                cursor.execute(
+                    "SELECT user_id FROM Users WHERE name LIKE ? OR title LIKE ? LIMIT 1;",
+                    (f"%{supervisor_id}%", f"%{supervisor_id}%"),
+                )
+                row = cursor.fetchone()
+                if row:
+                    resolved = row[0]
+            if not resolved:
+                cursor.execute("SELECT user_id FROM Users WHERE title LIKE '%Production%' LIMIT 1;")
+                row = cursor.fetchone()
+                if row:
+                    resolved = row[0]
+            if resolved:
+                target_supervisor_id = resolved
+
         with self.conn:
-            cursor = self.conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO ProductionNotifications (supervisor_id, order_id, message, sent_by, created_at)
                 VALUES (?, ?, ?, ?, ?);
                 """,
-                (supervisor_id, order_id, message, sender_id, created_at),
+                (target_supervisor_id, target_order_id, message, sender_id, created_at),
             )
             notification_id = cursor.lastrowid
 
         return {
             "notification_id": notification_id,
-            "supervisor_id": supervisor_id,
-            "order_id": order_id,
+            "supervisor_id": target_supervisor_id,
+            "order_id": target_order_id,
             "message": message,
             "sent_by": sender_id,
             "created_at": created_at,

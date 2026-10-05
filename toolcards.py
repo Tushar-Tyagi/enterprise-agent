@@ -102,15 +102,15 @@ class CancelPurchaseOrderInput(BaseToolInput):
 
 
 class SendEmailInput(BaseToolInput):
-    recipient_id: str = Field(..., description="Target recipient user ID.")
+    recipient_id: str = Field(..., description="Target recipient user ID (e.g. 'u-301' for Production Supervisor Sam Taylor).")
     subject: str = Field(..., description="Subject of the email.")
     body: str = Field(..., description="Body text of the email message.")
     idempotency_key: str = Field(..., description="Unique idempotency client key.")
 
 
 class NotifyProductionInput(BaseToolInput):
-    supervisor_id: str = Field(..., description="Supervisor user ID to notify.")
-    order_id: str = Field(..., description="Production order identifier impacted.")
+    supervisor_id: str = Field(..., description="Supervisor user ID to notify (e.g. 'u-301' for Production Supervisor Sam Taylor).")
+    order_id: str = Field(..., description="Production order identifier impacted (e.g. '4812').")
     message: str = Field(..., description="Detailed operational alert message.")
     idempotency_key: str = Field(..., description="Unique idempotency client key.")
 

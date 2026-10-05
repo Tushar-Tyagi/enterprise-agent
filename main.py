@@ -159,14 +159,15 @@ def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
             print(" OPERATIONAL BRIEFING & IMPACT ASSESSMENT:")
             print(f"  * Impacted Production Order : Order {attention_item.get('production_order_id')} (Scheduled Start: {attention_item.get('production_scheduled_start')})")
             print(f"  * Delay Risk / Slip Details : PO {attention_item.get('po_id')} (Part {attention_item.get('part_id')}) delayed until {attention_item.get('delayed_promised_date')}")
-            print(f"  * Mitigating Action         : {pending['name']} (Target: {pending.get('args', {}).get('po_id', pending['name'])})")
+            target_ref = pending.get("args", {}).get("po_id") or pending.get("args", {}).get("order_id") or pending.get("args", {}).get("recipient_id") or pending["name"]
+            print(f"  * Mitigating Action         : {pending['name']} (Target: {target_ref})")
             print(f"  * Authorized Approver       : [{approver_id}]" + (" (Escalated to backup)" if is_escalated else " (Primary)"))
             print(f"  * Routing Context           : {pending.get('routing_reason')}")
             print("\n MODEL OPERATIONAL JUSTIFICATION:")
             print(f"  \"{pending.get('reason')}\"")
             print("-----------------------------------------------------------------")
 
-            task_desc = f"{pending['name']} ({pending.get('args', {}).get('po_id', pending['name'])})"
+            task_desc = f"{pending['name']} ({target_ref})"
             if args.auto_approve:
                 print(f"\nAuto-approving specific write task '{task_desc}' from [{approver_id}] via flag.")
                 user_choice = "a"
