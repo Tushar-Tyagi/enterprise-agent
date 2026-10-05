@@ -45,6 +45,16 @@ python3 main.py
 python3 main.py --auto-approve
 ```
 
+### Run Scenario A Free-Form Agent Mode
+Runs the autonomous tool-calling agent with centralized toolcards, model rationale, RBAC verification, mutating action gating, idempotency, and Saga rollback compensation:
+```bash
+# Interactive mode (prompts with model reason before each mutating action)
+python3 main.py --mode freeform
+
+# Auto-approve mode
+python3 main.py --mode freeform --auto-approve
+```
+
 ### Run Multi-Scenario Environment Demo
 Exercises database traps, permission barriers, Scenario A (PO expedite), and Scenario B (quality lot reallocation):
 ```bash
@@ -52,7 +62,7 @@ python3 run_demo.py
 ```
 
 ### Run Test Suite
-Executes all 12 unit and integration tests across data layers, trap detection, and graph lifecycles:
+Executes all 24 unit and integration tests across data layers, trap detection, deterministic pipelines, and free-form agent lifecycles:
 ```bash
 pytest -v
 ```
@@ -70,14 +80,21 @@ enterprise-agent/
 │   ├── api.py                # SQLiteCompanyAPI access layer with RBAC and transactions
 │   └── exceptions.py         # Custom exceptions (UnauthorizedError, ApprovalLimitExceededError, etc.)
 ├── detector.py               # Out-of-band operational detector for stockout and delay risks
-├── agent.py                  # LangGraph orchestrator with context gathering, LLM planner, and gating
-├── main.py                   # Scenario A CLI harness with checkpointing and time advancement
+├── toolcards.py              # Centralized toolcards, Pydantic schemas with mandatory reason, and RBAC tools
+├── transaction.py            # Idempotency registry and Saga compensation rollback stack
+├── agent.py                  # LangGraph deterministic pipeline (Scenario A)
+├── agent_freeform.py         # LangGraph free-form cyclical agent with tool loop and human gating
+├── main.py                   # Scenario A CLI harness with deterministic & free-form modes
 ├── run_demo.py               # Standalone database and scenario validation script
 ├── environment.yml           # Conda environment definition
 ├── requirements.txt          # Python pip dependencies
 └── tests/
     ├── test_company_api.py   # 11 tests for RBAC, traps, clock gating, and DB operations
-    └── test_scenario_a_agent.py # End-to-end LangGraph lifecycle integration test
+    ├── test_scenario_a_agent.py # End-to-end deterministic LangGraph lifecycle integration test
+    ├── test_freeform_agent.py   # 4 tests for free-form lifecycle, gating, idempotency, and compensation
+    ├── test_toolcards.py        # 4 tests for toolcards, schema validation, and RBAC enforcement
+    ├── test_transaction.py      # 2 tests for idempotency caching and Saga LIFO unwinding
+    └── test_main_cli.py         # CLI argument and mode selection test
 ```
 
 ### Data Layer (`environment/`)

@@ -39,7 +39,7 @@
 - Consumes: `environment.api.SQLiteCompanyAPI`, `environment.exceptions.UnauthorizedError`
 - Produces: `TOOL_REGISTRY`, `get_all_tools(api: SQLiteCompanyAPI, user_id: str)`, `build_toolcards_prompt()`
 
-- [ ] **Step 1: Write the failing test for tool schemas, RBAC verification, and mandatory reason**
+- [x] **Step 1: Write the failing test for tool schemas, RBAC verification, and mandatory reason**
 
 ```python
 # tests/test_toolcards.py
@@ -88,21 +88,21 @@ def test_toolcards_prompt_contains_all_tools():
     assert "reason" in prompt
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_toolcards.py -v`  
 Expected: FAIL with `ModuleNotFoundError: No module named 'toolcards'`
 
-- [ ] **Step 3: Implement `toolcards.py`**
+- [x] **Step 3: Implement `toolcards.py`**
 
 Define `BaseToolInput` with `reason: str`, Pydantic models for read and mutating tools, tool factories bound to `SQLiteCompanyAPI`, and `build_toolcards_prompt()`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_toolcards.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add toolcards.py tests/test_toolcards.py
@@ -121,7 +121,7 @@ git commit -m "feat: implement centralized toolcards with rbac and rationale sch
 - Consumes: `environment.api.SQLiteCompanyAPI`
 - Produces: `IdempotencyRegistry`, `CompensationStack`, `execute_with_transaction_guard`
 
-- [ ] **Step 1: Write the failing test for idempotency and compensation stack**
+- [x] **Step 1: Write the failing test for idempotency and compensation stack**
 
 ```python
 # tests/test_transaction.py
@@ -168,21 +168,21 @@ def test_compensation_stack_lifo_unwind():
     assert api.get_purchase_order("PO-77815")["status"] == "CANCELLED"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_transaction.py -v`  
 Expected: FAIL with `ModuleNotFoundError: No module named 'transaction'`
 
-- [ ] **Step 3: Implement `transaction.py`**
+- [x] **Step 3: Implement `transaction.py`**
 
 Implement `IdempotencyRegistry` with in-memory cache and optional database table persistence, and `CompensationStack` with LIFO unwinding and structured rollback logging.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_transaction.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add transaction.py tests/test_transaction.py
@@ -201,7 +201,7 @@ git commit -m "feat: implement idempotency registry and saga compensation stack"
 - Consumes: `toolcards.py`, `transaction.py`, `environment.api.SQLiteCompanyAPI`
 - Produces: `create_freeform_agent_graph(api, checkpointer)`, `FreeformAgentState`
 
-- [ ] **Step 1: Write the failing test for free-form graph compilation, gating, and compensation**
+- [x] **Step 1: Write the failing test for free-form graph compilation, gating, and compensation**
 
 ```python
 # tests/test_freeform_agent.py
@@ -254,21 +254,21 @@ def test_freeform_graph_compilation_and_gating():
     assert "messages" in res
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_freeform_agent.py -v`  
 Expected: FAIL with `ModuleNotFoundError: No module named 'agent_freeform'`
 
-- [ ] **Step 3: Implement `agent_freeform.py`**
+- [x] **Step 3: Implement `agent_freeform.py`**
 
 Define `FreeformAgentState`, build the iterative tool-calling graph, connect read tools for immediate execution, intercept mutating tools in `gate_mutating_tool`, evaluate spending limits and calendar out-of-office rules, execute approved actions through `execute_mutating_tool` with `CompensationStack`, and capture exact telemetry metadata.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_freeform_agent.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add agent_freeform.py tests/test_freeform_agent.py
@@ -287,7 +287,7 @@ git commit -m "feat: implement free-form agent graph with tool loop and human ga
 - Consumes: `agent.py:create_scenario_a_graph`, `agent_freeform.py:create_freeform_agent_graph`
 - Produces: CLI argument `--mode [deterministic|freeform]`
 
-- [ ] **Step 1: Write test for CLI argument parsing and mode selection**
+- [x] **Step 1: Write test for CLI argument parsing and mode selection**
 
 ```python
 # tests/test_main_cli.py
@@ -303,21 +303,21 @@ def test_cli_mode_arguments():
     assert args_freeform.mode == "freeform"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_main_cli.py -v`  
 Expected: FAIL with `ImportError: cannot import name 'build_parser' from 'main'`
 
-- [ ] **Step 3: Refactor `main.py` to extract `build_parser` and dispatch `--mode freeform`**
+- [x] **Step 3: Refactor `main.py` to extract `build_parser` and dispatch `--mode freeform`**
 
 Preserve all existing deterministic behavior when `--mode deterministic` is chosen. When `--mode freeform` is selected, initialize `create_freeform_agent_graph`, run until the gate interrupts on a mutating tool, display the model's `reason`, prompt for approval, and resume execution.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pytest tests/test_main_cli.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add main.py tests/test_main_cli.py
@@ -333,18 +333,18 @@ git commit -m "feat: add --mode freeform to CLI runner with reason-based approva
 - Test: `tests/test_freeform_agent.py`
 - Test: `tests/test_company_api.py`
 
-- [ ] **Step 1: Run complete test suite covering both deterministic and free-form modes**
+- [x] **Step 1: Run complete test suite covering both deterministic and free-form modes**
 
 Run: `pytest -v`  
 Expected: All tests pass (12 original tests + new free-form tests).
 
-- [ ] **Step 2: Run demo harness in both deterministic and free-form modes**
+- [x] **Step 2: Run demo harness in both deterministic and free-form modes**
 
 Run: `python3 main.py --allow-mock-planner --auto-approve`  
 Run: `python3 main.py --mode freeform --allow-mock-planner --auto-approve`  
 Expected: Both exit 0 with clean audit logs.
 
-- [ ] **Step 3: Commit final integration updates**
+- [x] **Step 3: Commit final integration updates**
 
 ```bash
 git add tests/
