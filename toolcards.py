@@ -198,28 +198,33 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
     def make_read_emails(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _read_emails(reason: str, recipient_id: Optional[str] = None, unread_only: bool = True) -> Any:
             target = recipient_id or uid
-            return api_inst.get_emails(recipient_id=target, unread_only=unread_only, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.get_emails(recipient_id=target, unread_only=unread_only)
         return _read_emails
 
     def make_get_po(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _get_po(po_id: str, reason: str) -> Any:
-            return api_inst.get_purchase_order(po_id=po_id, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.get_purchase_order(po_id=po_id)
         return _get_po
 
     def make_get_prod(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _get_prod(reason: str, part_id: Optional[str] = None) -> Any:
-            return api_inst.get_production_orders(part_id=part_id, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.get_production_orders(part_id=part_id)
         return _get_prod
 
     def make_query_sup(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _query_sup(reason: str, part_id: Optional[str] = None, approved_only: bool = True) -> Any:
-            return api_inst.query_suppliers(part_id=part_id, approved_only=approved_only, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.query_suppliers(part_id=part_id, approved_only=approved_only)
         return _query_sup
 
     def make_get_cal(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _get_cal(reason: str, user_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Any:
             target = user_id or uid
-            return api_inst.get_calendar_events(user_id=target, start_date=start_date, end_date=end_date, requesting_user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.get_calendar_events(user_id=target)
         return _get_cal
 
     def make_create_po(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
@@ -233,35 +238,39 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
             idempotency_key: str,
             reason: str,
         ) -> Any:
-            return api_inst.create_po(
-                po_id=po_id,
-                part_id=part_id,
-                supplier_id=supplier_id,
-                quantity=quantity,
-                unit_price=unit_price,
-                promised_date=promised_date,
-                user_id=uid,
-            )
+            with api_inst.user_context(uid):
+                return api_inst.create_po(
+                    po_id=po_id,
+                    part_id=part_id,
+                    supplier_id=supplier_id,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    promised_date=promised_date,
+                )
         return _create_po
 
     def make_cancel_po(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _cancel_po(po_id: str, reason: str, idempotency_key: str) -> Any:
-            return api_inst.cancel_po(po_id=po_id, reason=reason, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.cancel_po(po_id=po_id, reason=reason)
         return _cancel_po
 
     def make_send_email(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _send_email(recipient_id: str, subject: str, body: str, idempotency_key: str, reason: str) -> Any:
-            return api_inst.send_email(recipient_id=recipient_id, subject=subject, body=body, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.send_email(recipient_id=recipient_id, subject=subject, body=body)
         return _send_email
 
     def make_notify_prod(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _notify_prod(supervisor_id: str, order_id: str, message: str, idempotency_key: str, reason: str) -> Any:
-            return api_inst.notify_production(supervisor_id=supervisor_id, order_id=order_id, message=message, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.notify_production(supervisor_id=supervisor_id, order_id=order_id, message=message)
         return _notify_prod
 
     def make_schedule_event(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _schedule_event(trigger_date: str, target_table: str, payload: Dict[str, Any], idempotency_key: str, reason: str) -> Any:
-            return api_inst.schedule_event(trigger_date=trigger_date, target_table=target_table, payload=payload, user_id=uid)
+            with api_inst.user_context(uid):
+                return api_inst.schedule_event(trigger_date=trigger_date, target_table=target_table, payload=payload)
         return _schedule_event
 
     factory_map = {
