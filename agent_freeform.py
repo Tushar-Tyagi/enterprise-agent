@@ -34,6 +34,7 @@ class FreeformAgentState(TypedDict):
     approver_id: str
     primary_approver_id: str
     escalated_to_backup: bool
+    unanswered_at_eod: bool
     idempotency_records: Dict[str, Any]
     compensation_stack: List[Dict[str, Any]]
     audit_trail: List[str]
@@ -296,23 +297,22 @@ def create_freeform_agent_graph(
         user = api.get_user(primary_approver_id)
         backup_id = user.get("backup_approver_id")
         current_clock = api.get_clock()
-        current_dt = datetime.strptime(current_clock, "%Y-%m-%d").date()
-        tomorrow_str = (current_dt + timedelta(days=1)).strftime("%Y-%m-%d")
-
-        # Evaluate Out of Office for tomorrow
-        is_ooo_tomorrow = api.is_user_out_of_office(primary_approver_id, check_date=tomorrow_str)
+        # Evaluate whether primary approver is Out of Office TODAY or if request was left unanswered at EOD
+        is_ooo_today = api.is_user_out_of_office(primary_approver_id, check_date=current_clock)
+        unanswered_at_eod = state.get("unanswered_at_eod", False)
 
         escalated = False
-        if is_ooo_tomorrow and backup_id:
+        if (is_ooo_today or unanswered_at_eod) and backup_id:
             escalated = True
             approver_id = backup_id
             routing_reason = (
-                f"Rule Triggered: Approver '{primary_approver_id}' is Out of Office tomorrow ({tomorrow_str}). "
-                f"Escalated authority to designated backup '{backup_id}'."
+                f"Rule Triggered: Approval request was unanswered by '{primary_approver_id}' at end of day. "
+                f"Approver is Out of Office on {current_clock}. "
+                f"Escalated authority to designated backup '{backup_id}' (Alex Morgan)."
             )
         else:
             approver_id = primary_approver_id
-            routing_reason = "Action requires authorized human review before execution."
+            routing_reason = f"Primary approver '{primary_approver_id}' active. Action requires authorized review."
 
         pending_action = {
             "name": tool_name,

@@ -159,18 +159,43 @@ def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
             print(f"  * Authorized Approver: [{approver_id}]")
             print("-----------------------------------------------------------------")
 
-            prompt_text = f"\nAuthorize action '{pending['name']}' from [{approver_id}]? (y/n): "
             if args.auto_approve:
-                print(f"{prompt_text}y [Auto-Approved via flag]")
-                user_choice = "y"
+                print(f"\nAuto-approving action '{pending['name']}' from [{approver_id}] via flag.")
+                user_choice = "a"
             else:
+                if not is_escalated:
+                    prompt_text = f"\nAction requires approval from [{approver_id}]. Choose [a]ccept, [d]ecline, [w]ait: "
+                else:
+                    prompt_text = f"\nAction requires approval from backup approver [{approver_id}]. Choose [a]ccept, [d]ecline: "
                 user_choice = input(prompt_text).strip().lower()
 
-            if user_choice != "y":
+            if user_choice in ("w", "wait") and not is_escalated:
+                print(f"\n[WAIT SELECTED]: Request unanswered by [{approver_id}] at end of day (17:00).")
+                print(f"Advancing clock from {api.get_clock()} by 1 day...")
+                new_clock = api.advance_clock(1)
+                print(f"System Clock is now: {new_clock}")
+
+                from langchain_core.messages import SystemMessage
+                current_state["messages"].append(
+                    SystemMessage(
+                        content=(
+                            f"[System Update: System date has advanced to {new_clock}. "
+                            f"The approval request to Dana Whitfield ({approver_id}) was left unanswered at end of day yesterday. "
+                            f"Dana Whitfield is now Out of Office (OOO) on PTO today. "
+                            f"Route approval authority to designated backup approver Alex Morgan (u-102).]"
+                        )
+                    )
+                )
+                current_state["unanswered_at_eod"] = True
+                current_state["pending_action"] = None
+                current_state["approval_status"] = "none"
+                continue
+
+            elif user_choice in ("a", "accept", "y", "yes"):
+                current_state["approval_status"] = "approved"
+            else:
                 print("\n[!] Execution rejected by user. Aborting free-form workflow.")
                 break
-
-            current_state["approval_status"] = "approved"
         else:
             # Reached natural termination
             break
@@ -236,8 +261,15 @@ def main():
     print("\n--- [Time Simulation] Advancing clock to next Tuesday (2026-09-08) ---")
     current_date = api.get_clock()
     print(f"Clock before advancement: {current_date}")
-    new_date = api.advance_clock(6)
-    print(f"Clock advanced to: {new_date}")
+    from datetime import datetime
+    curr_dt = datetime.strptime(current_date, "%Y-%m-%d").date()
+    target_dt = datetime.strptime("2026-09-08", "%Y-%m-%d").date()
+    days_to_advance = max(0, (target_dt - curr_dt).days)
+    if days_to_advance > 0:
+        new_date = api.advance_clock(days_to_advance)
+        print(f"Clock advanced to: {new_date}")
+    else:
+        print(f"Clock already at: {current_date}")
 
     print("\nChecking Dana Whitfield's inbox on 2026-09-08 for scheduled follow-up task:")
     dana_emails = api.get_emails(recipient_id="u-101")
