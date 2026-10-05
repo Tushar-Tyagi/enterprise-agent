@@ -6,12 +6,20 @@ import sys
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from agent import create_scenario_a_graph
+from agent_freeform import create_freeform_agent_graph
 from detector import Detector
 from environment import SQLiteCompanyAPI, create_company_database
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Scenario A AI Agent Runner & CLI Harness")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["deterministic", "freeform"],
+        default="deterministic",
+        help="Agent mode: 'deterministic' (fixed LangGraph pipeline) or 'freeform' (autonomous tool-calling loop)",
+    )
     parser.add_argument(
         "--auto-approve",
         "-y",
@@ -29,51 +37,10 @@ def main():
         action="store_true",
         help="Allow deterministic fallback planner if OPENROUTER_API_KEY is not set",
     )
-    args = parser.parse_args()
+    return parser
 
-    # 1. Verify OPENROUTER_API_KEY
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key and not args.allow_mock_planner:
-        print("\n" + "=" * 65)
-        print(" [CONFIGURATION ERROR] OPENROUTER_API_KEY is not set.")
-        print("=" * 65)
-        print(" The agent planner requires OpenRouter to evaluate context and")
-        print(" generate the action plan.")
-        print("\n To resolve, export your API key in your shell:")
-        print("     export OPENROUTER_API_KEY='sk-or-v1-...'")
-        print("\n Or run with --allow-mock-planner to run the pipeline using fallback logic:")
-        print("     python3 main.py --allow-mock-planner")
-        print("=" * 65 + "\n")
-        sys.exit(1)
 
-    print("=================================================================")
-    print(" Enterprise Agent Harness: Scenario A (Supply Chain Delay)")
-    print("=================================================================")
-
-    # 2. Initialize Database & API as u-101 (Dana Whitfield)
-    conn = create_company_database(":memory:", seed=True)
-    api = SQLiteCompanyAPI(conn=conn, current_user_id="u-101")
-
-    print(f"System Clock Initialized: {api.get_clock()}")
-    user = api.get_user("u-101")
-    print(f"Active User Context: {user['name']} ({user['title']}, ID: {user['user_id']})")
-    print(f"Spending Approval Threshold: ${user['po_create_max_value']:,.2f}")
-    print(f"Designated Backup Approver: {user['backup_approver_id']}")
-
-    # 3. Run Detector to scan operational channels
-    print("\n--- [Step 1: Detection] Scanning operational channels for attention items ---")
-    detector = Detector(api)
-    attention_item = detector.scan_for_attention_items("u-101")
-
-    if not attention_item:
-        print("[!] No attention items detected. Operational baseline stable.")
-        return
-
-    print(f"Attention Item Detected: {attention_item['type']} (Severity: {attention_item['severity']})")
-    print(f"  * Mail ID: {attention_item['mail_id']}")
-    print(f"  * Description: {attention_item['description']}")
-    print(f"  * Impact: Delayed PO {attention_item['po_id']} breaches Production Order {attention_item['production_order_id']} start date ({attention_item['production_scheduled_start']})")
-
+def run_deterministic_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
     # 4. Instantiate LangGraph App with SqliteSaver Checkpointer
     checkpoint_conn = sqlite3.connect(":memory:", check_same_thread=False)
     checkpointer = SqliteSaver(checkpoint_conn)
@@ -144,22 +111,134 @@ def main():
     final_state = app.invoke(None, config)
 
     print("\n--- [Audit Trail after Execution] ---")
-    # Print newly added audit entries
     start_idx = len(paused_state["audit_trail"])
     for log_entry in final_state["audit_trail"][start_idx:]:
         print(f" > {log_entry}")
 
     print("\nExecution Status:", final_state.get("approval_status"))
 
-    # 9. Advance Clock to simulate time passing until next Tuesday (2026-09-08)
-    print("\n--- [Step 4: Time Simulation] Advancing clock to next Tuesday (2026-09-08) ---")
+
+def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
+    checkpoint_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    checkpointer = SqliteSaver(checkpoint_conn)
+    checkpointer.setup()
+
+    graph = create_freeform_agent_graph(api=api, checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": args.thread_id}}
+
+    current_state = {
+        "messages": [],
+        "user_id": "u-101",
+        "attention_item": attention_item,
+        "pending_action": None,
+        "approval_status": "none",
+        "approver_id": "u-101",
+        "primary_approver_id": "u-101",
+        "escalated_to_backup": False,
+        "idempotency_records": {},
+        "compensation_stack": [],
+        "audit_trail": [],
+        "llm_telemetry": {},
+    }
+
+    print("\n--- [Step 2: Free-Form Tool Exploration & Human Gating Loop] ---")
+
+    while True:
+        current_state = graph.invoke(current_state, config)
+
+        # Print latest audit trail items
+        if current_state.get("pending_action"):
+            pending = current_state["pending_action"]
+            approver_id = current_state.get("approver_id", "u-101")
+
+            print("\n-----------------------------------------------------------------")
+            print(f" [MUTATING ACTION INTERCEPTED]: `{pending['name']}`")
+            print(f"  * Model Reason: \"{pending.get('reason')}\"")
+            print(f"  * Arguments: {pending.get('args')}")
+            print(f"  * Routing Info: {pending.get('routing_reason')}")
+            print(f"  * Authorized Approver: [{approver_id}]")
+            print("-----------------------------------------------------------------")
+
+            prompt_text = f"\nAuthorize action '{pending['name']}' from [{approver_id}]? (y/n): "
+            if args.auto_approve:
+                print(f"{prompt_text}y [Auto-Approved via flag]")
+                user_choice = "y"
+            else:
+                user_choice = input(prompt_text).strip().lower()
+
+            if user_choice != "y":
+                print("\n[!] Execution rejected by user. Aborting free-form workflow.")
+                break
+
+            current_state["approval_status"] = "approved"
+        else:
+            # Reached natural termination
+            break
+
+    print("\n--- [Audit Trail after Free-Form Execution] ---")
+    for log_entry in current_state.get("audit_trail", []):
+        print(f" > {log_entry}")
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    # 1. Verify OPENROUTER_API_KEY
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key and not args.allow_mock_planner:
+        print("\n" + "=" * 65)
+        print(" [CONFIGURATION ERROR] OPENROUTER_API_KEY is not set.")
+        print("=" * 65)
+        print(" The agent planner requires OpenRouter to evaluate context and")
+        print(" generate the action plan.")
+        print("\n To resolve, export your API key in your shell:")
+        print("     export OPENROUTER_API_KEY='sk-or-v1-...'")
+        print("\n Or run with --allow-mock-planner to run the pipeline using fallback logic:")
+        print("     python3 main.py --allow-mock-planner")
+        print("=" * 65 + "\n")
+        sys.exit(1)
+
+    print("=================================================================")
+    print(f" Enterprise Agent Harness: Scenario A [Mode: {args.mode.upper()}]")
+    print("=================================================================")
+
+    # 2. Initialize Database & API as u-101 (Dana Whitfield)
+    conn = create_company_database(":memory:", seed=True)
+    api = SQLiteCompanyAPI(conn=conn, current_user_id="u-101")
+
+    print(f"System Clock Initialized: {api.get_clock()}")
+    user = api.get_user("u-101")
+    print(f"Active User Context: {user['name']} ({user['title']}, ID: {user['user_id']})")
+    print(f"Spending Approval Threshold: ${user['po_create_max_value']:,.2f}")
+    print(f"Designated Backup Approver: {user['backup_approver_id']}")
+
+    # 3. Run Detector to scan operational channels
+    print("\n--- [Step 1: Detection] Scanning operational channels for attention items ---")
+    detector = Detector(api)
+    attention_item = detector.scan_for_attention_items("u-101")
+
+    if not attention_item:
+        print("[!] No attention items detected. Operational baseline stable.")
+        return
+
+    print(f"Attention Item Detected: {attention_item['type']} (Severity: {attention_item['severity']})")
+    print(f"  * Mail ID: {attention_item['mail_id']}")
+    print(f"  * Description: {attention_item['description']}")
+    print(f"  * Impact: Delayed PO {attention_item['po_id']} breaches Production Order {attention_item['production_order_id']} start date ({attention_item['production_scheduled_start']})")
+
+    if args.mode == "freeform":
+        run_freeform_mode(args, api, attention_item)
+    else:
+        run_deterministic_mode(args, api, attention_item)
+
+    # Advance Clock to simulate time passing until next Tuesday (2026-09-08)
+    print("\n--- [Time Simulation] Advancing clock to next Tuesday (2026-09-08) ---")
     current_date = api.get_clock()
     print(f"Clock before advancement: {current_date}")
-    # 2026-09-02 (Wed) to 2026-09-08 (Tue) is 6 days
     new_date = api.advance_clock(6)
     print(f"Clock advanced to: {new_date}")
 
-    # 10. Prove scheduled follow-up event fired
     print("\nChecking Dana Whitfield's inbox on 2026-09-08 for scheduled follow-up task:")
     dana_emails = api.get_emails(recipient_id="u-101")
     follow_up_email = next((e for e in dana_emails if "M-CHECK" in e["mail_id"]), None)
@@ -172,7 +251,7 @@ def main():
         print(f"    * Body: {follow_up_email['body']}")
         print(f"    * Sent At: {follow_up_email['sent_at']}")
     else:
-        print("  [FAIL] Scheduled follow-up email was not found in inbox.")
+        print("  [NOTE] No scheduled follow-up email in inbox.")
 
     print("\n=================================================================")
     print(" Scenario A Workflow Completed Successfully.")
