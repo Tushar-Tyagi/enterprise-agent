@@ -187,9 +187,13 @@ def create_scenario_a_graph(api: SQLiteCompanyAPI, checkpointer: Optional[BaseCh
             if hasattr(raw_msg, "usage_metadata") and raw_msg.usage_metadata:
                 usage = dict(raw_msg.usage_metadata)
             elif hasattr(raw_msg, "response_metadata") and raw_msg.response_metadata:
-                usage = raw_msg.response_metadata.get("token_usage", {})
+                usage = raw_msg.response_metadata.get("token_usage") or {}
+            if not isinstance(usage, dict):
+                usage = {}
 
             resp_meta = getattr(raw_msg, "response_metadata", {}) or {}
+            if not isinstance(resp_meta, dict):
+                resp_meta = {}
             cost_info = resp_meta.get("cost") or resp_meta.get("cost_details") or 0.0
 
             telemetry = {

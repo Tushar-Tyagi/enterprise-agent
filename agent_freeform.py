@@ -245,9 +245,13 @@ def create_freeform_agent_graph(
             if hasattr(ai_msg, "usage_metadata") and ai_msg.usage_metadata:
                 usage = dict(ai_msg.usage_metadata)
             elif hasattr(ai_msg, "response_metadata") and ai_msg.response_metadata:
-                usage = ai_msg.response_metadata.get("token_usage", {})
+                usage = ai_msg.response_metadata.get("token_usage") or {}
+            if not isinstance(usage, dict):
+                usage = {}
 
             resp_meta = getattr(ai_msg, "response_metadata", {}) or {}
+            if not isinstance(resp_meta, dict):
+                resp_meta = {}
             cost_info = resp_meta.get("cost") or resp_meta.get("cost_details") or 0.0
 
             telemetry = {
