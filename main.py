@@ -150,6 +150,7 @@ def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
         if current_state.get("pending_action"):
             pending = current_state["pending_action"]
             approver_id = current_state.get("approver_id", "u-101")
+            is_escalated = current_state.get("escalated_to_backup", False)
 
             print("\n-----------------------------------------------------------------")
             print(f" [MUTATING ACTION INTERCEPTED]: `{pending['name']}`")
