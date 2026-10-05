@@ -217,7 +217,7 @@ def create_freeform_agent_graph(
         else:
             # Live OpenRouter LLM Call
             tools = get_all_tools(api=api, user_id=user_id)
-            model_name = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+            model_name = os.environ.get("OPENROUTER_MODEL", "google/gemini-2.5-pro")
 
             try:
                 llm = ChatOpenAI(
