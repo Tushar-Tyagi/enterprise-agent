@@ -106,6 +106,14 @@ def test_freeform_mutating_interception_and_resume(monkeypatch):
     assert replacement_po["status"] == "OPEN"
     assert state_after_create["approval_status"] == "pending"
     assert state_after_create["pending_action"]["name"] == "cancel_purchase_order"
+    
+    # Verify rich operational details in model reason
+    cancel_reason = state_after_create["pending_action"]["args"]["reason"]
+    assert "4812" in cancel_reason
+    assert "2026-09-07" in cancel_reason
+    assert "2026-09-08" in cancel_reason
+    assert "Supplier Z" in cancel_reason or "S-Z" in cancel_reason
+    assert "2026-09-04" in cancel_reason
 
     # Step 3: Human approves cancel_purchase_order and resumes
     resume_state_2 = dict(state_after_create)

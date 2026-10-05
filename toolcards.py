@@ -17,7 +17,13 @@ from environment.api import SQLiteCompanyAPI
 class BaseToolInput(BaseModel):
     reason: str = Field(
         ...,
-        description="Detailed rationale from the agent explaining why this specific tool invocation is required to resolve the operational situation.",
+        description=(
+            "Comprehensive operational justification for this tool call. "
+            "For mutating actions (creating/cancelling purchase orders or notifications), the reason MUST explicitly include: "
+            "(1) the impacted production order ID and scheduled start date, "
+            "(2) the delayed supplier name, original date, and delayed date showing how much delay/slip occurs, and "
+            "(3) the alternate supplier chosen, unit price, lead time, and promised delivery date."
+        ),
     )
 
 

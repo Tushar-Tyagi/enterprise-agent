@@ -152,22 +152,28 @@ def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
             approver_id = current_state.get("approver_id", "u-101")
             is_escalated = current_state.get("escalated_to_backup", False)
 
-            print("\n-----------------------------------------------------------------")
+            print("\n=================================================================")
             print(f" [MUTATING ACTION INTERCEPTED]: `{pending['name']}`")
-            print(f"  * Model Reason: \"{pending.get('reason')}\"")
-            print(f"  * Arguments: {pending.get('args')}")
-            print(f"  * Routing Info: {pending.get('routing_reason')}")
-            print(f"  * Authorized Approver: [{approver_id}]")
+            print("=================================================================")
+            print(" OPERATIONAL BRIEFING & IMPACT ASSESSMENT:")
+            print(f"  * Impacted Production Order : Order {attention_item.get('production_order_id')} (Scheduled Start: {attention_item.get('production_scheduled_start')})")
+            print(f"  * Delay Risk / Slip Details : PO {attention_item.get('po_id')} (Part {attention_item.get('part_id')}) delayed until {attention_item.get('delayed_promised_date')}")
+            print(f"  * Mitigating Action         : {pending['name']} (Target: {pending.get('args', {}).get('po_id', pending['name'])})")
+            print(f"  * Authorized Approver       : [{approver_id}]" + (" (Escalated to backup)" if is_escalated else " (Primary)"))
+            print(f"  * Routing Context           : {pending.get('routing_reason')}")
+            print("\n MODEL OPERATIONAL JUSTIFICATION:")
+            print(f"  \"{pending.get('reason')}\"")
             print("-----------------------------------------------------------------")
 
+            task_desc = f"{pending['name']} ({pending.get('args', {}).get('po_id', pending['name'])})"
             if args.auto_approve:
-                print(f"\nAuto-approving action '{pending['name']}' from [{approver_id}] via flag.")
+                print(f"\nAuto-approving specific write task '{task_desc}' from [{approver_id}] via flag.")
                 user_choice = "a"
             else:
                 if not is_escalated:
-                    prompt_text = f"\nAction requires approval from [{approver_id}]. Choose [a]ccept, [d]ecline, [w]ait: "
+                    prompt_text = f"\nAuthorize specific write task '{task_desc}' from [{approver_id}]? Choose [a]ccept, [d]ecline, [w]ait: "
                 else:
-                    prompt_text = f"\nAction requires approval from backup approver [{approver_id}]. Choose [a]ccept, [d]ecline: "
+                    prompt_text = f"\nAuthorize specific write task '{task_desc}' from backup approver [{approver_id}]? Choose [a]ccept, [d]ecline: "
                 user_choice = input(prompt_text).strip().lower()
 
             if user_choice in ("w", "wait") and not is_escalated:

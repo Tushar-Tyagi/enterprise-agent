@@ -68,6 +68,12 @@ def create_freeform_agent_graph(
                 "and execute mitigation actions.\n\n"
                 "CRITICAL POLICIES:\n"
                 "1. Every single tool call MUST provide a detailed 'reason' parameter justifying the call.\n"
+                "   Generic phrases like 'mitigate disruption' or 'cancel delayed PO' are STRICTLY PROHIBITED.\n"
+                "   For any mutating action (create_purchase_order, cancel_purchase_order, notify_production), "
+                "   your 'reason' MUST explicitly include:\n"
+                "   (a) What production order is delayed and its scheduled start date (e.g. Order 4812 starting 2026-09-07).\n"
+                "   (b) The exact delay details (e.g. Supplier Y delayed PO-77812 to 2026-09-08, slipping past start).\n"
+                "   (c) The chosen alternate supplier, unit price, lead time, and promised delivery date before production starts (e.g. Supplier Z / S-Z delivering on 2026-09-04).\n"
                 "2. All mutating tools (creating/cancelling POs, notifications) are intercepted by human gating.\n"
                 "3. Each mutating call must specify a unique 'idempotency_key'.\n\n"
                 f"{toolcards_doc}"
@@ -136,7 +142,12 @@ def create_freeform_agent_graph(
                             "unit_price": 210.0,
                             "promised_date": "2026-09-04",
                             "idempotency_key": "idemp-po-77815",
-                            "reason": f"Expedite replacement part {attention['part_id']} from Supplier Z arriving 2026-09-04 before production start {attention['production_scheduled_start']}",
+                            "reason": (
+                                f"Part {attention['part_id']} was delayed by Supplier Y to {attention['delayed_promised_date']}, "
+                                f"breaching Production Order {attention['production_order_id']} scheduled start on {attention['production_scheduled_start']}. "
+                                f"Creating replacement order with approved alternate Supplier Z (S-Z) at $210.00/unit with 2-day lead time "
+                                f"guaranteeing delivery on 2026-09-04 prior to production."
+                            ),
                         },
                         "id": "call-create-po-003",
                     }],
@@ -150,7 +161,12 @@ def create_freeform_agent_graph(
                         "name": "cancel_purchase_order",
                         "args": {
                             "po_id": attention["po_id"],
-                            "reason": f"Shipment delayed past production start date; replaced by PO-77815 with Supplier Z",
+                            "reason": (
+                                f"Cancelling delayed PO {attention['po_id']} with Supplier Y because its revised delivery on {attention['delayed_promised_date']} "
+                                f"slips past Production Order {attention['production_order_id']} scheduled start on {attention['production_scheduled_start']}. "
+                                f"Sourcing has been transferred to approved alternate Supplier Z (S-Z) with promised delivery on 2026-09-04 "
+                                f"under replacement PO-77815."
+                            ),
                             "idempotency_key": "idemp-cancel-77812",
                         },
                         "id": "call-cancel-po-004",
