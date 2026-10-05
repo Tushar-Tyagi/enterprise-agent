@@ -321,11 +321,17 @@ def create_freeform_agent_graph(
         if (is_ooo_today or unanswered_at_eod) and backup_id:
             escalated = True
             approver_id = backup_id
-            routing_reason = (
-                f"Rule Triggered: Approval request was unanswered by '{primary_approver_id}' at end of day. "
-                f"Approver is Out of Office on {current_clock}. "
-                f"Escalated authority to designated backup '{backup_id}' (Alex Morgan)."
-            )
+            if unanswered_at_eod:
+                routing_reason = (
+                    f"Rule Triggered: Approval request was unanswered by '{primary_approver_id}' at end of day. "
+                    f"Approver is Out of Office on {current_clock}. "
+                    f"Escalated authority to designated backup '{backup_id}' (Alex Morgan)."
+                )
+            else:
+                routing_reason = (
+                    f"Rule Triggered: Primary approver '{primary_approver_id}' is Out of Office on {current_clock}. "
+                    f"Escalated authority to designated backup '{backup_id}' (Alex Morgan)."
+                )
         else:
             approver_id = primary_approver_id
             routing_reason = f"Primary approver '{primary_approver_id}' active. Action requires authorized review."

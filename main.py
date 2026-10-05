@@ -144,7 +144,8 @@ def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
     print("\n--- [Step 2: Free-Form Tool Exploration & Human Gating Loop] ---")
 
     while True:
-        current_state = graph.invoke(current_state, config)
+        if current_state.get("approval_status") == "approved" or not current_state.get("pending_action"):
+            current_state = graph.invoke(current_state, config)
 
         # Print latest audit trail items
         if current_state.get("pending_action"):
@@ -182,27 +183,35 @@ def run_freeform_mode(args, api: SQLiteCompanyAPI, attention_item: dict):
                 new_clock = api.advance_clock(1)
                 print(f"System Clock is now: {new_clock}")
 
-                from langchain_core.messages import SystemMessage
-                current_state["messages"].append(
-                    SystemMessage(
-                        content=(
-                            f"[System Update: System date has advanced to {new_clock}. "
-                            f"The approval request to Dana Whitfield ({approver_id}) was left unanswered at end of day yesterday. "
-                            f"Dana Whitfield is now Out of Office (OOO) on PTO today. "
-                            f"Route approval authority to designated backup approver Alex Morgan (u-102).]"
-                        )
-                    )
-                )
+                user_obj = api.get_user(approver_id)
+                backup_id = user_obj.get("backup_approver_id", "u-102") if user_obj else "u-102"
+                backup_user = api.get_user(backup_id)
+                backup_name = backup_user.get("name", "Alex Morgan") if backup_user else "Alex Morgan"
+
                 current_state["unanswered_at_eod"] = True
-                current_state["pending_action"] = None
-                current_state["approval_status"] = "none"
+                current_state["approver_id"] = backup_id
+                current_state["escalated_to_backup"] = True
+                pending["routing_reason"] = (
+                    f"Rule Triggered: Request was unanswered by {user_obj.get('name', approver_id)} at end of day. "
+                    f"Approver is Out of Office on {new_clock}. Escalated to designated backup approver {backup_name} ({backup_id})."
+                )
+                current_state["pending_action"] = pending
+                current_state["approval_status"] = "pending"
+                current_state.setdefault("audit_trail", []).append(
+                    f"Gate Check [Escalation]: Approval unanswered at EOD by '{approver_id}'. "
+                    f"Clock advanced to {new_clock}. Escalated '{pending['name']}' to backup approver '{backup_id}' ({backup_name})."
+                )
                 continue
 
             elif user_choice in ("a", "accept", "y", "yes"):
                 current_state["approval_status"] = "approved"
-            else:
+            elif user_choice in ("d", "decline", "n", "no"):
                 print("\n[!] Execution rejected by user. Aborting free-form workflow.")
                 break
+            else:
+                valid_opts = "[a]ccept, [d]ecline, [w]ait" if not is_escalated else "[a]ccept, [d]ecline"
+                print(f"\n[!] Unrecognized input '{user_choice}'. Please choose {valid_opts}.")
+                continue
         else:
             # Reached natural termination
             break
