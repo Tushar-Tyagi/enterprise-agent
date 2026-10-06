@@ -82,12 +82,37 @@ class GetCalendarEventsInput(BaseToolInput):
     )
 
 
+class GetQualityLotsInput(BaseToolInput):
+    part_id: Optional[str] = Field(
+        default=None,
+        description="Filter quality lots by part identifier (e.g. 'P-1180').",
+    )
+    status: Optional[str] = Field(
+        default=None,
+        description="Filter quality lots by status ('available' or 'hold').",
+    )
+    allocated_order_id: Optional[str] = Field(
+        default=None,
+        description="Filter by allocated production order ID.",
+    )
+
+
+class GetQualityLotInput(BaseToolInput):
+    lot_id: str = Field(
+        ...,
+        description="Unique lot identifier (e.g. 'L-2093', 'L-2094').",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Mutating Tool Schemas
 # ---------------------------------------------------------------------------
 
 class CreatePurchaseOrderInput(BaseToolInput):
-    po_id: str = Field(..., description="Unique PO identifier to assign (e.g. 'PO-77815').")
+    po_id: str = Field(
+        default="PO-77815",
+        description="Unique PO identifier to assign. Recommended: 'PO-77815' (avoids collision with existing PO-77812, PO-77813, PO-77814).",
+    )
     part_id: str = Field(..., description="Part identifier being ordered (e.g. 'P-4471').")
     supplier_id: str = Field(..., description="Target supplier identifier (e.g. 'S-Z').")
     quantity: int = Field(..., description="Quantity of parts to order.")
@@ -116,9 +141,22 @@ class NotifyProductionInput(BaseToolInput):
 
 
 class ScheduleEventInput(BaseToolInput):
-    trigger_date: str = Field(..., description="Date the event should mature (YYYY-MM-DD).")
+    trigger_date: str = Field(..., description="Date the event should mature (YYYY-MM-DD), e.g. '2026-09-08'.")
     target_table: str = Field(..., description="Target table to materialize into (e.g. 'Mail').")
-    payload: Dict[str, Any] = Field(..., description="Event payload dictionary.")
+    payload: Dict[str, Any] = Field(
+        ...,
+        description=(
+            "Event payload dictionary. For target_table='Mail', provide: 'mail_id' (e.g. 'M-CHECK-PO-77815'), "
+            "'recipient_id' ('u-101'), 'sender' ('system@enterprise.internal'), 'subject', and 'body'."
+        ),
+    )
+    idempotency_key: str = Field(..., description="Unique idempotency client key.")
+
+
+class ReallocateLotForOrderInput(BaseToolInput):
+    order_id: str = Field(..., description="Target production order ID (e.g. '4820').")
+    from_lot_id: str = Field(..., description="Current lot ID on hold to release (e.g. 'L-2093').")
+    to_lot_id: str = Field(..., description="Available candidate lot ID to allocate (e.g. 'L-2094').")
     idempotency_key: str = Field(..., description="Unique idempotency client key.")
 
 
@@ -136,19 +174,19 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
     "get_purchase_order": {
         "schema": GetPurchaseOrderInput,
         "is_mutating": False,
-        "required_scope": "po:read",
+        "required_scope": "erp:po:read",
         "description": "Inspect purchase order details, status, promised dates, and line item amounts.",
     },
     "get_production_orders": {
         "schema": GetProductionOrdersInput,
         "is_mutating": False,
-        "required_scope": "production:read",
+        "required_scope": "erp:production:read",
         "description": "Inspect scheduled manufacturing runs and check required parts and start dates.",
     },
     "query_suppliers": {
         "schema": QuerySuppliersInput,
         "is_mutating": False,
-        "required_scope": "suppliers:read",
+        "required_scope": "erp:po:read",
         "description": "Search active suppliers, approved catalogs, unit pricing, and lead time days.",
     },
     "get_calendar_events": {
@@ -157,16 +195,28 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "required_scope": "calendar:read",
         "description": "Query calendar schedules and out-of-office dates for a given user.",
     },
+    "get_quality_lots": {
+        "schema": GetQualityLotsInput,
+        "is_mutating": False,
+        "required_scope": "erp:quality:read",
+        "description": "Query inspected lots, part associations, quality hold status, and allocated orders.",
+    },
+    "get_quality_lot": {
+        "schema": GetQualityLotInput,
+        "is_mutating": False,
+        "required_scope": "erp:quality:read",
+        "description": "Inspect specific quality lot details, hold reasons, and test timestamps.",
+    },
     "create_purchase_order": {
         "schema": CreatePurchaseOrderInput,
         "is_mutating": True,
-        "required_scope": "po:create",
+        "required_scope": "erp:po:create",
         "description": "Create a new purchase order with an alternate supplier. Requires human approval if spending thresholds apply.",
     },
     "cancel_purchase_order": {
         "schema": CancelPurchaseOrderInput,
         "is_mutating": True,
-        "required_scope": "po:cancel",
+        "required_scope": "erp:po:cancel",
         "description": "Cancel an open purchase order due to shipping delays or alternate sourcing.",
     },
     "send_email": {
@@ -181,10 +231,16 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "required_scope": "production:notify",
         "description": "Issue an operational notification to the production supervisor regarding a schedule or part update.",
     },
+    "reallocate_lot_for_order": {
+        "schema": ReallocateLotForOrderInput,
+        "is_mutating": True,
+        "required_scope": "erp:quality:write",
+        "description": "Atomically release a hold lot and reallocate an available replacement lot for a production order.",
+    },
     "schedule_event": {
         "schema": ScheduleEventInput,
         "is_mutating": True,
-        "required_scope": "system:admin",
+        "required_scope": "mail:send",
         "description": "Schedule a deferred event to materialize when the system clock reaches trigger_date.",
     },
 }
@@ -233,6 +289,18 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
                 return api_inst.get_calendar_events(user_id=target)
         return _get_cal
 
+    def make_get_quality_lots(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
+        def _get_quality_lots(reason: str, part_id: Optional[str] = None, status: Optional[str] = None, allocated_order_id: Optional[str] = None) -> Any:
+            with api_inst.user_context(uid):
+                return api_inst.get_quality_lots(part_id=part_id, status=status, allocated_order_id=allocated_order_id)
+        return _get_quality_lots
+
+    def make_get_quality_lot(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
+        def _get_quality_lot(lot_id: str, reason: str) -> Any:
+            with api_inst.user_context(uid):
+                return api_inst.get_quality_lot(lot_id=lot_id)
+        return _get_quality_lot
+
     def make_create_po(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _create_po(
             po_id: str,
@@ -245,8 +313,23 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
             reason: str,
         ) -> Any:
             with api_inst.user_context(uid):
+                api_inst.check_permission("erp:po:create", user_id=uid)
+                target_po_id = po_id
+                cursor = api_inst.conn.cursor()
+                cursor.execute("SELECT 1 FROM PurchaseOrders WHERE po_id = ?;", (target_po_id,))
+                if cursor.fetchone():
+                    # Collision detected: find max numerical suffix or allocate next available
+                    cursor.execute("SELECT po_id FROM PurchaseOrders WHERE po_id LIKE 'PO-%';")
+                    rows = cursor.fetchall()
+                    existing_nums = [77814]
+                    for (r_id,) in rows:
+                        parts = r_id.split("-")
+                        if len(parts) == 2 and parts[1].isdigit():
+                            existing_nums.append(int(parts[1]))
+                    target_po_id = f"PO-{max(existing_nums) + 1}"
+
                 return api_inst.create_po(
-                    po_id=po_id,
+                    po_id=target_po_id,
                     part_id=part_id,
                     supplier_id=supplier_id,
                     quantity=quantity,
@@ -273,6 +356,12 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
                 return api_inst.notify_production(supervisor_id=supervisor_id, order_id=order_id, message=message)
         return _notify_prod
 
+    def make_reallocate_lot_for_order(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
+        def _reallocate_lot_for_order(order_id: str, from_lot_id: str, to_lot_id: str, idempotency_key: str, reason: str) -> Any:
+            with api_inst.user_context(uid):
+                return api_inst.reallocate_lot_for_order(order_id=order_id, from_lot_id=from_lot_id, to_lot_id=to_lot_id)
+        return _reallocate_lot_for_order
+
     def make_schedule_event(api_inst: SQLiteCompanyAPI, uid: str) -> Callable:
         def _schedule_event(trigger_date: str, target_table: str, payload: Dict[str, Any], idempotency_key: str, reason: str) -> Any:
             with api_inst.user_context(uid):
@@ -285,10 +374,13 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
         "get_production_orders": make_get_prod,
         "query_suppliers": make_query_sup,
         "get_calendar_events": make_get_cal,
+        "get_quality_lots": make_get_quality_lots,
+        "get_quality_lot": make_get_quality_lot,
         "create_purchase_order": make_create_po,
         "cancel_purchase_order": make_cancel_po,
         "send_email": make_send_email,
         "notify_production": make_notify_prod,
+        "reallocate_lot_for_order": make_reallocate_lot_for_order,
         "schedule_event": make_schedule_event,
     }
 
@@ -310,9 +402,21 @@ def get_all_tools(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
     return tools
 
 
-def build_toolcards_prompt() -> str:
+def get_tools_for_user(api: SQLiteCompanyAPI, user_id: str) -> List[StructuredTool]:
     """
-    Format all tool definitions into an explicit toolcard guide for the agent's initial prompt.
+    Construct only the subset of StructuredTools that the specified user
+    is authorized to invoke under their RBAC permissions.
+    """
+    user_info = api.get_user(user_id)
+    user_scopes = set(user_info.get("scopes", []))
+    all_tools = get_all_tools(api, user_id)
+    return [t for t in all_tools if t.metadata.get("required_scope") in user_scopes]
+
+
+def build_toolcards_prompt(allowed_tools: Optional[List[str]] = None) -> str:
+    """
+    Format tool definitions into an explicit toolcard guide for the agent's initial prompt.
+    If allowed_tools is provided, filters to only those tools.
     """
     lines = [
         "## OPERATIONAL TOOLCARDS & REGISTRY",
@@ -322,6 +426,8 @@ def build_toolcards_prompt() -> str:
     ]
 
     for name, meta in TOOL_REGISTRY.items():
+        if allowed_tools is not None and name not in allowed_tools:
+            continue
         category = "MUTATING ACTION [GATED]" if meta["is_mutating"] else "READ QUERY [IMMEDIATE]"
         lines.append(f"### `{name}` ({category})")
         lines.append(f"- **Description:** {meta['description']}")
@@ -332,3 +438,4 @@ def build_toolcards_prompt() -> str:
         lines.append("")
 
     return "\n".join(lines)
+

@@ -289,3 +289,128 @@ def test_freeform_compensation_unwinding_on_error():
     assert idemp._records["idemp-po-77815"]["status"] == "COMPENSATED"
     assert idemp._records["idemp-cancel-77812"]["status"] == "COMPENSATED"
 
+
+def test_freeform_multi_call_sequential_gating():
+    """
+    Verify that when an LLM returns multiple tool calls in a single AIMessage,
+    each mutating tool call is sequentially gated, authorized, and executed one-by-one,
+    and all corresponding ToolMessages are collected into messages.
+    """
+    from langchain_core.messages import AIMessage, HumanMessage
+    conn = create_company_database(":memory:", seed=True)
+    api = SQLiteCompanyAPI(conn=conn, current_user_id="u-101")
+    cp_conn = sqlite3.connect(":memory:", check_same_thread=False)
+    checkpointer = SqliteSaver(cp_conn)
+    checkpointer.setup()
+
+    graph = create_freeform_agent_graph(api=api, checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": "test-multi-call-gating"}}
+
+    attention_item = {
+        "type": "delayed_shipment_impacting_production",
+        "po_id": "PO-77812",
+        "part_id": "P-4471",
+        "production_order_id": "4812",
+        "supplier_id": "S-Y",
+        "quantity": 50,
+        "delayed_promised_date": "2026-09-08",
+        "production_scheduled_start": "2026-09-07",
+    }
+
+    # Simulate an LLM emitting 3 tool calls in a single AIMessage
+    batch_ai_msg = AIMessage(
+        content="I will cancel the delayed PO, create the replacement PO, and notify production.",
+        tool_calls=[
+            {
+                "name": "cancel_purchase_order",
+                "args": {
+                    "po_id": "PO-77812",
+                    "reason": "Order 4812 starting 2026-09-07 is delayed by Supplier Y to 2026-09-08. Alternate Supplier Z delivering 2026-09-04.",
+                    "idempotency_key": "idemp-cancel-batch",
+                },
+                "id": "call-batch-001",
+            },
+            {
+                "name": "create_purchase_order",
+                "args": {
+                    "po_id": "PO-77815",
+                    "part_id": "P-4471",
+                    "supplier_id": "S-Z",
+                    "quantity": 50,
+                    "unit_price": 210.0,
+                    "promised_date": "2026-09-04",
+                    "idempotency_key": "idemp-create-batch",
+                    "reason": "Order 4812 starting 2026-09-07 is delayed by Supplier Y to 2026-09-08. Alternate Supplier Z delivering 2026-09-04.",
+                },
+                "id": "call-batch-002",
+            },
+            {
+                "name": "notify_production",
+                "args": {
+                    "supervisor_id": "u-301",
+                    "order_id": "4812",
+                    "message": "Mitigation applied: PO-77812 cancelled and PO-77815 placed with Supplier Z.",
+                    "idempotency_key": "idemp-notify-batch",
+                    "reason": "Notify Sam Taylor regarding Order 4812 resolution.",
+                },
+                "id": "call-batch-003",
+            },
+        ],
+    )
+
+    initial_state = {
+        "messages": [HumanMessage(content="Remediate disruption"), batch_ai_msg],
+        "user_id": "u-101",
+        "attention_item": attention_item,
+        "pending_tool_calls": list(batch_ai_msg.tool_calls),
+        "pending_action": None,
+        "approval_status": "none",
+        "approver_id": "u-101",
+        "primary_approver_id": "u-101",
+        "escalated_to_backup": False,
+        "unanswered_at_eod": False,
+        "idempotency_records": {},
+        "compensation_stack": [],
+        "audit_trail": [],
+        "llm_telemetry": {},
+    }
+
+    # Step 1: Graph invocation halts and gates Call 1 (cancel_purchase_order)
+    s1 = graph.invoke(initial_state, config)
+    assert s1["approval_status"] == "pending"
+    assert s1["pending_action"]["name"] == "cancel_purchase_order"
+    assert s1["pending_action"]["id"] == "call-batch-001"
+
+    # Step 2: Approve Call 1 -> executes Call 1, halts and gates Call 2 (create_purchase_order)
+    s1_approved = dict(s1)
+    s1_approved["approval_status"] = "approved"
+    s2 = graph.invoke(s1_approved, config)
+    assert s2["approval_status"] == "pending"
+    assert s2["pending_action"]["name"] == "create_purchase_order"
+    assert s2["pending_action"]["id"] == "call-batch-002"
+    assert api.get_purchase_order("PO-77812")["status"] == "CANCELLED"
+
+    # Step 3: Approve Call 2 -> executes Call 2, halts and gates Call 3 (notify_production)
+    s2_approved = dict(s2)
+    s2_approved["approval_status"] = "approved"
+    s3 = graph.invoke(s2_approved, config)
+    assert s3["approval_status"] == "pending"
+    assert s3["pending_action"]["name"] == "notify_production"
+    assert s3["pending_action"]["id"] == "call-batch-003"
+    assert api.get_purchase_order("PO-77815")["status"] == "OPEN"
+
+    # Step 4: Approve Call 3 -> executes Call 3, queue is exhausted
+    s3_approved = dict(s3)
+    s3_approved["approval_status"] = "approved"
+    s4 = graph.invoke(s3_approved, config)
+    # Queue is now empty
+    assert len(s4.get("pending_tool_calls", [])) == 0
+
+    # Verify all 3 ToolMessages are in messages
+    from langchain_core.messages import ToolMessage
+    tool_messages = [m for m in s4["messages"] if isinstance(m, ToolMessage)]
+    tool_call_ids = [m.tool_call_id for m in tool_messages]
+    assert "call-batch-001" in tool_call_ids
+    assert "call-batch-002" in tool_call_ids
+    assert "call-batch-003" in tool_call_ids
+

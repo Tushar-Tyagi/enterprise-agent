@@ -3,7 +3,7 @@ class CompanyAPIError(Exception):
     pass
 
 
-class UnauthorizedError(CompanyAPIError):
+class UnauthorizedError(CompanyAPIError, PermissionError):
     """Raised when a user attempts an action without the required scope/permission."""
     def __init__(self, user_id: str, required_scope: str, message: str = None):
         self.user_id = user_id

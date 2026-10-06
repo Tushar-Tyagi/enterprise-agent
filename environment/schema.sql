@@ -121,3 +121,24 @@ CREATE TABLE IF NOT EXISTS ScheduledEvents (
     processed INTEGER NOT NULL DEFAULT 0 CHECK (processed IN (0, 1)),
     processed_at TEXT
 );
+
+-- Append-Only Audit Log of Engine Steps, Inputs, Decisions, Approvals, Outcomes
+CREATE TABLE IF NOT EXISTS AuditLogs (
+    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    category TEXT NOT NULL CHECK (category IN ('INPUT', 'DECISION', 'APPROVAL', 'EXECUTION', 'COMPENSATION')),
+    actor_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    details_json TEXT NOT NULL
+);
+
+-- Processed Triggers / Out-of-band Detector Deduplication
+CREATE TABLE IF NOT EXISTS ProcessedTriggers (
+    trigger_id TEXT PRIMARY KEY,
+    trigger_type TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    metadata_json TEXT NOT NULL
+);
+
+

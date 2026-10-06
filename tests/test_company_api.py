@@ -333,3 +333,30 @@ def test_clock_driven_scheduled_events(api):
     assert order["order_id"] == "5000"
     assert order["quantity"] == 80
 
+
+def test_audit_log_events(api):
+    run_id = "test-run-123"
+    api.log_audit_event(
+        run_id=run_id,
+        category="INPUT",
+        actor_id="u-101",
+        summary="Detected PO delay",
+        details={"po_id": "PO-77812", "part_id": "P-4471"},
+    )
+    api.log_audit_event(
+        run_id=run_id,
+        category="APPROVAL",
+        actor_id="u-102",
+        summary="Backup approver authorized replacement PO",
+        details={"approved": True},
+    )
+
+    logs = api.get_audit_logs(run_id=run_id)
+    assert len(logs) == 2
+    assert logs[0]["category"] == "INPUT"
+    assert logs[0]["actor_id"] == "u-101"
+    assert logs[0]["details"]["po_id"] == "PO-77812"
+    assert logs[1]["category"] == "APPROVAL"
+    assert logs[1]["actor_id"] == "u-102"
+
+

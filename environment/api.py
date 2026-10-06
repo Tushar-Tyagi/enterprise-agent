@@ -864,3 +864,112 @@ class SQLiteCompanyAPI:
             "sent_by": sender_id,
             "created_at": created_at,
         }
+
+    def get_production_notifications(self, order_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieve dispatched production notifications."""
+        cursor = self.conn.cursor()
+        if order_id:
+            cursor.execute("SELECT * FROM ProductionNotifications WHERE order_id = ? ORDER BY notification_id ASC;", (str(order_id),))
+        else:
+            cursor.execute("SELECT * FROM ProductionNotifications ORDER BY notification_id ASC;")
+        return [dict(row) for row in cursor.fetchall()]
+
+    # -------------------------------------------------------------------------
+    # Audit Trail: Append-Only Run Logging
+    # -------------------------------------------------------------------------
+
+    def log_audit_event(
+        self,
+        run_id: str,
+        category: str,
+        actor_id: str,
+        summary: str,
+        details: Optional[Dict[str, Any]] = None,
+        timestamp: Optional[str] = None,
+    ) -> int:
+        """
+        Record an immutable append-only audit event for a given execution run.
+        Categories: 'INPUT', 'DECISION', 'APPROVAL', 'EXECUTION', 'COMPENSATION'.
+        """
+        ts = timestamp or f"{self.get_clock()}T12:00:00"
+        details_json = json.dumps(details or {})
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO AuditLogs (run_id, timestamp, category, actor_id, summary, details_json)
+                VALUES (?, ?, ?, ?, ?, ?);
+                """,
+                (run_id, ts, category.upper(), actor_id, summary, details_json),
+            )
+            return cursor.lastrowid
+
+    def get_audit_logs(self, run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Retrieve audit log records, optionally filtered by run_id."""
+        cursor = self.conn.cursor()
+        if run_id:
+            cursor.execute("SELECT * FROM AuditLogs WHERE run_id = ? ORDER BY log_id ASC;", (run_id,))
+        else:
+            cursor.execute("SELECT * FROM AuditLogs ORDER BY log_id ASC;")
+        rows = cursor.fetchall()
+        results = []
+        for r in rows:
+            entry = dict(r)
+            try:
+                entry["details"] = json.loads(entry["details_json"])
+            except Exception:
+                entry["details"] = {}
+            results.append(entry)
+        return results
+
+    # -------------------------------------------------------------------------
+    # Trigger Deduplication
+    # -------------------------------------------------------------------------
+
+    def is_trigger_processed(self, trigger_id: str) -> bool:
+        """Check if an attention trigger has already been processed."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT 1 FROM ProcessedTriggers WHERE trigger_id = ?;", (trigger_id,))
+        return cursor.fetchone() is not None
+
+    def record_processed_trigger(
+        self,
+        trigger_id: str,
+        trigger_type: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        detected_at: Optional[str] = None,
+    ) -> bool:
+        """
+        Record a trigger in ProcessedTriggers. Returns True if newly inserted,
+        or False if it was already present.
+        """
+        if self.is_trigger_processed(trigger_id):
+            return False
+
+        ts = detected_at or f"{self.get_clock()}T12:00:00"
+        meta_json = json.dumps(metadata or {})
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT OR IGNORE INTO ProcessedTriggers (trigger_id, trigger_type, detected_at, metadata_json)
+                VALUES (?, ?, ?, ?);
+                """,
+                (trigger_id, trigger_type, ts, meta_json),
+            )
+        return True
+
+    def get_processed_triggers(self) -> List[Dict[str, Any]]:
+        """List all recorded triggers."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ProcessedTriggers ORDER BY detected_at ASC;")
+        rows = cursor.fetchall()
+        results = []
+        for r in rows:
+            entry = dict(r)
+            try:
+                entry["metadata"] = json.loads(entry["metadata_json"])
+            except Exception:
+                entry["metadata"] = {}
+            results.append(entry)
+        return results
+

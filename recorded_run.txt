@@ -1,0 +1,207 @@
+=================================================================
+ Enterprise Autonomous Operations Simulation [Clock: 2026-09-02]
+=================================================================
+
+System Clock Initialized: 2026-09-02
+--- [Day 1: Periodic Detection] Scanning operational channels ---
+  * Detected Signal 1: delayed_shipment_impacting_production (PO PO-77812 delayed past Order 4812 start)
+
+===================================================================
+ Enterprise Agent: Scenario A (Purchasing PO Replacement) [FREE-FORM AGENT]
+===================================================================
+Active User Context: Dana Whitfield (Purchasing Manager, ID: u-101)
+Spending Approval Threshold: $25,000.00
+Designated Backup Approver: u-102
+
+--- [Free-Form Tool Exploration & Gating Loop: Scenario A] ---
+
+===================================================================
+ [MUTATING ACTION INTERCEPTED]: `cancel_purchase_order`
+===================================================================
+ PURCHASING OPERATIONAL BRIEFING & IMPACT ASSESSMENT:
+  * Impacted Production Order : Order 4812 (Scheduled Start: 2026-09-07)
+  * Delay Risk / Slip Details : PO PO-77812 (Part P-4471) delayed until 2026-09-08
+  * Mitigating Action         : cancel_purchase_order (Target: PO-77812)
+  * Authorized Approver       : [u-101] (Primary)
+  * Routing Context           : Primary approver 'u-101' active. Action requires authorized review.
+
+ MODEL OPERATIONAL JUSTIFICATION:
+  "Cancelling PO-77812 with Supplier S-Y because they delayed delivery to 2026-09-08, which is after the scheduled start date of 2026-09-07 for Production Order 4812. I am replacing this with an order from Supplier Z (S-Z) who can deliver by 2026-09-04 at $210.00/unit."
+-------------------------------------------------------------------
+
+Auto-approving specific write task 'cancel_purchase_order (PO-77812)' from [u-101] via flag.
+
+===================================================================
+ [MUTATING ACTION INTERCEPTED]: `create_purchase_order`
+===================================================================
+ PURCHASING OPERATIONAL BRIEFING & IMPACT ASSESSMENT:
+  * Impacted Production Order : Order 4812 (Scheduled Start: 2026-09-07)
+  * Delay Risk / Slip Details : PO PO-77812 (Part P-4471) delayed until 2026-09-08
+  * Mitigating Action         : create_purchase_order (Target: PO-77815)
+  * Authorized Approver       : [u-101] (Primary)
+  * Routing Context           : Primary approver 'u-101' active. Action requires authorized review.
+
+ MODEL OPERATIONAL JUSTIFICATION:
+  "Creating replacement PO-77815 with Supplier Z (S-Z) for 50 units of P-4471 at $210.00/unit to ensure availability for Production Order 4812 (starting 2026-09-07). This replaces PO-77812 (Supplier S-Y) which was delayed to 2026-09-08. Supplier Z has a 2-day lead time and will deliver by 2026-09-04."
+-------------------------------------------------------------------
+
+Auto-approving specific write task 'create_purchase_order (PO-77815)' from [u-101] via flag.
+
+===================================================================
+ [MUTATING ACTION INTERCEPTED]: `notify_production`
+===================================================================
+ PURCHASING OPERATIONAL BRIEFING & IMPACT ASSESSMENT:
+  * Impacted Production Order : Order 4812 (Scheduled Start: 2026-09-07)
+  * Delay Risk / Slip Details : PO PO-77812 (Part P-4471) delayed until 2026-09-08
+  * Mitigating Action         : notify_production (Target: 4812)
+  * Authorized Approver       : [u-101] (Primary)
+  * Routing Context           : Primary approver 'u-101' active. Action requires authorized review.
+
+ MODEL OPERATIONAL JUSTIFICATION:
+  "Notifying Production Supervisor Sam Taylor (u-301) that the supply issue for Production Order 4812 (starting 2026-09-07) has been resolved by cancelling the delayed PO-77812 (Supplier S-Y, delayed to 2026-09-08) and creating a new PO-77815 with Supplier Z (S-Z) for delivery on 2026-09-04."
+-------------------------------------------------------------------
+
+Auto-approving specific write task 'notify_production (4812)' from [u-101] via flag.
+
+===================================================================
+ [MUTATING ACTION INTERCEPTED]: `schedule_event`
+===================================================================
+ PURCHASING OPERATIONAL BRIEFING & IMPACT ASSESSMENT:
+  * Impacted Production Order : Order 4812 (Scheduled Start: 2026-09-07)
+  * Delay Risk / Slip Details : PO PO-77812 (Part P-4471) delayed until 2026-09-08
+  * Mitigating Action         : schedule_event (Target: schedule_event)
+  * Authorized Approver       : [u-101] (Primary)
+  * Routing Context           : Primary approver 'u-101' active. Action requires authorized review.
+
+ MODEL OPERATIONAL JUSTIFICATION:
+  "Scheduling a follow-up check for 2026-09-08 to verify the arrival of the replacement order PO-77815 from Supplier Z (S-Z) for Production Order 4812 (starting 2026-09-07). The original PO-77812 was delayed to 2026-09-08, so this check ensures the new order arrived as promised on 2026-09-04."
+-------------------------------------------------------------------
+
+Auto-approving specific write task 'schedule_event (schedule_event)' from [u-101] via flag.
+
+--- [Audit Trail after Scenario A Execution] ---
+ > Observation [get_purchase_order]: {"po_id": "PO-77812", "part_id": "P-4471", "supplier_id": "S-Y", "quantity": 50, "unit_price": 200.0, "total_amount": 10...
+ > Observation [query_suppliers]: [{"supplier_id": "S-Z", "name": "Supplier Z (Valid Alternate)", "approved": 1, "lead_time_days": 2, "unit_price": 210.0,...
+ > Gate Check: Intercepted mutating call 'cancel_purchase_order'. Model Reason: "Cancelling PO-77812 with Supplier S-Y because they delayed delivery to 2026-09-08, which is after the scheduled start date of 2026-09-07 for Production Order 4812. I am replacing this with an order from Supplier Z (S-Z) who can deliver by 2026-09-04 at $210.00/unit.". Primary approver 'u-101' active. Action requires authorized review.
+ > Execution [Mutate]: Successfully executed 'cancel_purchase_order' under user 'u-101'.
+ > Gate Check: Intercepted mutating call 'create_purchase_order'. Model Reason: "Creating replacement PO-77815 with Supplier Z (S-Z) for 50 units of P-4471 at $210.00/unit to ensure availability for Production Order 4812 (starting 2026-09-07). This replaces PO-77812 (Supplier S-Y) which was delayed to 2026-09-08. Supplier Z has a 2-day lead time and will deliver by 2026-09-04.". Primary approver 'u-101' active. Action requires authorized review.
+ > Execution [Mutate]: Successfully executed 'create_purchase_order' under user 'u-101'.
+ > Gate Check: Intercepted mutating call 'notify_production'. Model Reason: "Notifying Production Supervisor Sam Taylor (u-301) that the supply issue for Production Order 4812 (starting 2026-09-07) has been resolved by cancelling the delayed PO-77812 (Supplier S-Y, delayed to 2026-09-08) and creating a new PO-77815 with Supplier Z (S-Z) for delivery on 2026-09-04.". Primary approver 'u-101' active. Action requires authorized review.
+ > Execution [Mutate]: Successfully executed 'notify_production' under user 'u-101'.
+ > Gate Check: Intercepted mutating call 'schedule_event'. Model Reason: "Scheduling a follow-up check for 2026-09-08 to verify the arrival of the replacement order PO-77815 from Supplier Z (S-Z) for Production Order 4812 (starting 2026-09-07). The original PO-77812 was delayed to 2026-09-08, so this check ensures the new order arrived as promised on 2026-09-04.". Primary approver 'u-101' active. Action requires authorized review.
+ > Execution [Mutate]: Successfully executed 'schedule_event' under user 'u-101'.
+
+[AUDIT LOG] Persisted append-only audit record to: audit_trail.jsonl
+
+--- [Phase 2: Multi-Day Simulation] Advancing clock through next Tuesday (2026-09-08) ---
+ Clock tick -> 2026-09-03
+ Clock tick -> 2026-09-04
+ Clock tick -> 2026-09-05
+ Clock tick -> 2026-09-06
+ Clock tick -> 2026-09-07
+ Clock tick -> 2026-09-08
+
+System Clock is now: 2026-09-08
+Checking Dana Whitfield's inbox on 2026-09-08 for scheduled follow-up task:
+  [SUCCESS] Materialized Scheduled Task Email:
+    * Mail ID : M-CHECK-PO-77815
+    * From    : system@enterprise.internal
+    * Subject : Automated Check: Verify Arrival of Replacement PO PO-77815
+    * Body    : Confirm shipment arrived from Supplier Z for Production Order 4812.
+    * Sent At : 2026-09-08T08:00:00
+
+--- [Phase 3: Scenario B Detection] Signal 2: quality_hold_impacting_production (Lot L-2093 on hold) ---
+
+===================================================================
+ Enterprise Agent: Scenario B (Quality Hold & Reallocation) [FREE-FORM AGENT]
+===================================================================
+Active User Context: Casey Chen (Quality Manager, ID: u-201)
+Authorized Scopes: calendar:read, erp:po:read, erp:production:read, erp:quality:read, erp:quality:write, mail:read, mail:send, production:notify
+
+--- [Free-Form Tool Exploration & Gating Loop: Scenario B] ---
+
+===================================================================
+ [MUTATING ACTION INTERCEPTED]: `reallocate_lot_for_order`
+===================================================================
+ QUALITY OPERATIONAL BRIEFING & IMPACT ASSESSMENT:
+  * Impacted Production Order : Order 4820 (Scheduled Start: 2026-09-05)
+  * Quality Hold Risk         : Lot L-2093 is on hold ('Surface finish 3.4 Ra vs spec 3.2 Ra')
+  * Mitigating Action         : reallocate_lot_for_order (Target: L-2094)
+  * Authorized Approver       : [u-201] (Quality Manager)
+  * Routing Context           : Primary approver 'u-201' active. Action requires authorized review.
+
+ MODEL OPERATIONAL JUSTIFICATION:
+  "Reallocating available lot L-2094 to replace defective lot L-2093 for Production Order 4820, which is scheduled to start on 2026-09-05. L-2093 is on hold due to surface finish issues."
+-------------------------------------------------------------------
+
+Auto-approving specific write task 'reallocate_lot_for_order (L-2094)' from [u-201] via flag.
+
+===================================================================
+ [MUTATING ACTION INTERCEPTED]: `notify_production`
+===================================================================
+ QUALITY OPERATIONAL BRIEFING & IMPACT ASSESSMENT:
+  * Impacted Production Order : Order 4820 (Scheduled Start: 2026-09-05)
+  * Quality Hold Risk         : Lot L-2093 is on hold ('Surface finish 3.4 Ra vs spec 3.2 Ra')
+  * Mitigating Action         : notify_production (Target: notify_production)
+  * Authorized Approver       : [u-201] (Quality Manager)
+  * Routing Context           : Primary approver 'u-201' active. Action requires authorized review.
+
+ MODEL OPERATIONAL JUSTIFICATION:
+  "Notifying Production Supervisor Sam Taylor (u-301) that the quality shortage for Production Order 4820 has been resolved by reallocating lot L-2094."
+-------------------------------------------------------------------
+
+Auto-approving specific write task 'notify_production (notify_production)' from [u-201] via flag.
+
+--- [Audit Trail after Scenario B Execution] ---
+ > Observation [get_quality_lots]: [{"lot_id": "L-2093", "part_id": "P-1180", "status": "hold", "allocated_order_id": "4820", "hold_reason": "Surface finis...
+ > Gate Check: Intercepted mutating call 'reallocate_lot_for_order'. Model Reason: "Reallocating available lot L-2094 to replace defective lot L-2093 for Production Order 4820, which is scheduled to start on 2026-09-05. L-2093 is on hold due to surface finish issues.". Primary approver 'u-201' active. Action requires authorized review.
+ > Execution [Mutate]: Successfully executed 'reallocate_lot_for_order' under user 'u-201'.
+ > Gate Check: Intercepted mutating call 'notify_production'. Model Reason: "Notifying Production Supervisor Sam Taylor (u-301) that the quality shortage for Production Order 4820 has been resolved by reallocating lot L-2094.". Primary approver 'u-201' active. Action requires authorized review.
+ > Execution [Mutate]: Successfully executed 'notify_production' under user 'u-201'.
+
+[AUDIT LOG] Persisted append-only audit record to: audit_trail.jsonl
+
+=================================================================
+ [Phase 4: System Invariants & Failure Cases Demonstration]
+=================================================================
+
+[Case 1/5: RBAC & Permission Scope Enforcement]
+  [PASS] Casey Chen (u-201) blocked from 'create_po':
+         User 'u-201' lacks required permission scope: 'erp:po:create'
+  [PASS] Dana Whitfield (u-101) blocked from 'reallocate_lot_for_order':
+         User 'u-101' lacks required permission scope: 'erp:production:write OR erp:quality:write'
+
+[Case 2/5: Domain Trap Rejection (Unapproved Supplier, Hold Lot & Spending Threshold)]
+  [PASS] Unapproved Supplier Trap 'S-X' (Apex Fasteners) rejected:
+         Excluded from eligible vendors (approved=0, fails vendor qualification).
+  [PASS] Hold Lot Trap 'L-2095' (Chemical contamination) rejected:
+         Target lot 'L-2095' is not available (status: hold).
+  [PASS] Spending Approval Limit ($25,000 threshold) enforced:
+         User 'u-101' exceeded approval limit of $25,000.00 with requested amount $30,000.00. Escalate to backup approver: 'u-102'.
+
+[Case 3/5: Trigger Deduplication & Alert Suppression]
+  [PASS] Deduplication active: initial scan emitted 2 signal(s),
+         subsequent scan on identical state emitted 0 signal(s).
+
+[Case 4/5: Mid-Flight Saga Compensation Rollback]
+  * Transaction Step 1 completed: PO-77812 status changed to 'CANCELLED'
+  * Transaction Step 2 simulated failure: Downstream warehouse service unavailable during transaction (HTTP 503)
+  * Initiating LIFO backward compensation unwinding...
+  [PASS] Successfully unwound 1 action(s).
+         PO-77812 status restored to pre-incident state: 'OPEN'
+
+[Case 5/5: Idempotency Protection & Duplicate Write Prevention]
+  [PASS] Repeated operation with idempotency key 'tx-po-replacement-9999' safely
+         short-circuited and returned cached result without duplicate write.
+
+[AUDIT LOG] Persisted failure invariants audit record to: audit_trail.jsonl
+
+=================================================================
+ All Failure Cases and Invariants Verified Successfully.
+=================================================================
+
+
+=================================================================
+ Enterprise Multi-Agent Simulation Pipeline Completed.
+=================================================================
+

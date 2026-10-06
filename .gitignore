@@ -3,4 +3,6 @@ __pycache__/
 *.pyc
 **/*.pyc
 .pytest_cache/
-.superpowers/
+.env
+*.env
+.DS_Store
